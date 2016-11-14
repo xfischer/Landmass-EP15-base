@@ -5,8 +5,9 @@ public static class Noise {
 
 	public enum NormalizeMode {Local, Global};
 
-	public static float[,] GenerateNoiseMap(int mapWidth, int mapHeight, int seed, float scale, int octaves, float persistance, float lacunarity, Vector2 offset, NormalizeMode normalizeMode) {
-		float[,] noiseMap = new float[mapWidth,mapHeight];
+	public static float[,] GenerateNoiseMap(int mapSize, int seed, float scale, int octaves, float persistance, float lacunarity, Vector2 offset, NormalizeMode normalizeMode, AnimationCurve noiseFilterCurve) {
+		float[,] noiseMap = new float[mapSize,mapSize];
+		AnimationCurve noiseFilter = new AnimationCurve(noiseFilterCurve.keys);
 
 		System.Random prng = new System.Random (seed);
 		Vector2[] octaveOffsets = new Vector2[octaves];
@@ -31,12 +32,12 @@ public static class Noise {
 		float maxLocalNoiseHeight = float.MinValue;
 		float minLocalNoiseHeight = float.MaxValue;
 
-		float halfWidth = mapWidth / 2f;
-		float halfHeight = mapHeight / 2f;
+		float halfWidth = mapSize / 2f;
+		float halfHeight = mapSize / 2f;
 
 
-		for (int y = 0; y < mapHeight; y++) {
-			for (int x = 0; x < mapWidth; x++) {
+		for (int y = 0; y < mapSize; y++) {
+			for (int x = 0; x < mapSize; x++) {
 
 				amplitude = 1;
 				frequency = 1;
@@ -58,12 +59,12 @@ public static class Noise {
 				} else if (noiseHeight < minLocalNoiseHeight) {
 					minLocalNoiseHeight = noiseHeight;
 				}
-				noiseMap [x, y] = noiseHeight;
+				noiseMap [x, y] = noiseFilter.Evaluate(noiseHeight);
 			}
 		}
 
-		for (int y = 0; y < mapHeight; y++) {
-			for (int x = 0; x < mapWidth; x++) {
+		for (int y = 0; y < mapSize; y++) {
+			for (int x = 0; x < mapSize; x++) {
 				if (normalizeMode == NormalizeMode.Local) {
 					noiseMap [x, y] = Mathf.InverseLerp (minLocalNoiseHeight, maxLocalNoiseHeight, noiseMap [x, y]);
 				} else {

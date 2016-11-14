@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 public class MapGenerator : MonoBehaviour {
 
-	public enum DrawMode { NoiseMap, ColourMap, Mesh, FalloffMap };
+	public enum DrawMode { NoiseMap, ColourMap, Lines, Mesh, FalloffMap };
 	public DrawMode drawMode;
 
 	public TerrainData terrainData;
@@ -42,13 +42,15 @@ public class MapGenerator : MonoBehaviour {
 	}
 
 	public void DrawMapInEditor() {
-		MapData mapData = GenerateMapData(Vector2.zero);
+		MapData mapData = GenerateMapData(Vector2.zero, drawMode, noiseData.lineSpacing);
 
 		MapDisplay display = FindObjectOfType<MapDisplay>();
 		if (drawMode == DrawMode.NoiseMap) {
 			display.DrawTexture(TextureGenerator.TextureFromHeightMap(mapData.heightMap));
 		} else if (drawMode == DrawMode.ColourMap) {
 			display.DrawTexture(TextureGenerator.TextureFromColourMap(mapData.colourMap, mapChunkSize, mapChunkSize));
+		} else if (drawMode == DrawMode.Lines) {
+			display.DrawMesh(MeshGenerator.GenerateTerrainMesh(mapData.heightMap, terrainData.meshHeightMultiplier, terrainData.meshHeightCurve, editorPreviewLOD, terrainData.useFlatShading), TextureGenerator.TextureFromColourMap(mapData.colourMap, mapChunkSize, mapChunkSize));
 		} else if (drawMode == DrawMode.Mesh) {
 			display.DrawMesh(MeshGenerator.GenerateTerrainMesh(mapData.heightMap, terrainData.meshHeightMultiplier, terrainData.meshHeightCurve, editorPreviewLOD, terrainData.useFlatShading), TextureGenerator.TextureFromColourMap(mapData.colourMap, mapChunkSize, mapChunkSize));
 		} else if (drawMode == DrawMode.FalloffMap) {
@@ -56,16 +58,16 @@ public class MapGenerator : MonoBehaviour {
 		}
 	}
 
-	public void RequestMapData(Vector2 centre, Action<MapData> callback) {
+	public void RequestMapData(Vector2 centre, DrawMode mode, int lineSpacing, Action<MapData> callback) {
 		ThreadStart threadStart = delegate {
-			MapDataThread(centre, callback);
+			MapDataThread(centre, mode, lineSpacing, callback);
 		};
 
 		new Thread(threadStart).Start();
 	}
 
-	void MapDataThread(Vector2 centre, Action<MapData> callback) {
-		MapData mapData = GenerateMapData(centre);
+	void MapDataThread(Vector2 centre, DrawMode mode, int lineSpacing, Action<MapData> callback) {
+		MapData mapData = GenerateMapData(centre, mode, lineSpacing);
 		lock (mapDataThreadInfoQueue) {
 			mapDataThreadInfoQueue.Enqueue(new MapThreadInfo<MapData>(callback, mapData));
 		}
@@ -102,33 +104,47 @@ public class MapGenerator : MonoBehaviour {
 		}
 	}
 
-	MapData GenerateMapData(Vector2 centre) {
-		float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize + 2, mapChunkSize + 2, noiseData.seed, noiseData.noiseScale, noiseData.octaves, noiseData.persistance, noiseData.lacunarity, centre + noiseData.offset, noiseData.normalizeMode);
+	MapData GenerateMapData(Vector2 centre, DrawMode drawMode, int lineSpacing) {
+		float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize + 2, noiseData.seed, noiseData.noiseScale, noiseData.octaves, noiseData.persistance, noiseData.lacunarity, centre + noiseData.offset, noiseData.normalizeMode, noiseData.noiseFilterCurve);
 
 		if (terrainData.useFalloff) {
 			if (falloffMap == null) {
 				falloffMap = FalloffGenerator.GenerateFalloffMap(mapChunkSize + 2);
 			}
 		}
+
+
 		Color[] colourMap = new Color[mapChunkSize * mapChunkSize];
-		for (int y = 0; y < mapChunkSize + 2; y++) {
-			for (int x = 0; x < mapChunkSize + 2; x++) {
-				if (terrainData.useFalloff) {
-					noiseMap[x, y] = Mathf.Clamp01(noiseMap[x, y] - falloffMap[x, y]);
+		if (drawMode == DrawMode.Lines) {
+			for (int y = 0; y < mapChunkSize; y++) {
+				for (int x = 0; x < mapChunkSize; x++) {
+
+					if (y % lineSpacing == 0) {
+						colourMap[y * mapChunkSize + x] = Color.white;
+					} else {
+						colourMap[y * mapChunkSize + x] = Color.black;
+					}
 				}
-				if (x > 0 && y > 0 && x < mapChunkSize + 1 && y < mapChunkSize + 1) {
-					float currentHeight = noiseMap[x - 1, y - 1];
-					for (int i = 0; i < regions.Length; i++) {
-						if (currentHeight >= regions[i].height) {
-							colourMap[(y - 1) * mapChunkSize + (x - 1)] = regions[i].colour;
-						} else {
-							break;
+			}
+		} else {
+			for (int y = 0; y < mapChunkSize + 2; y++) {
+				for (int x = 0; x < mapChunkSize + 2; x++) {
+					if (terrainData.useFalloff) {
+						noiseMap[x, y] = Mathf.Clamp01(noiseMap[x, y] - falloffMap[x, y]);
+					}
+					if (x > 0 && y > 0 && x < mapChunkSize + 1 && y < mapChunkSize + 1) {
+						float currentHeight = noiseMap[x - 1, y - 1];
+						for (int i = 0; i < regions.Length; i++) {
+							if (currentHeight >= regions[i].height) {
+								colourMap[(y - 1) * mapChunkSize + (x - 1)] = regions[i].colour;
+							} else {
+								break;
+							}
 						}
 					}
 				}
 			}
 		}
-
 		return new MapData(noiseMap, colourMap);
 	}
 

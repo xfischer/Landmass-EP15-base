@@ -8,6 +8,10 @@ public class NoiseData : UpdatableData {
 
 	public float noiseScale;
 
+	public AnimationCurve noiseFilterCurve;
+	[Range(2,10)]
+	public int lineSpacing;
+
 	public int octaves;
 	[Range(0, 1)]
 	public float persistance;
@@ -22,6 +26,9 @@ public class NoiseData : UpdatableData {
 		}
 		if (octaves < 0) {
 			octaves = 0;
+		}
+		if (lineSpacing <= 0) {
+			lineSpacing = 1;
 		}
 
 		base.OnValidate();
